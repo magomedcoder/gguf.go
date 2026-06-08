@@ -30,3 +30,13 @@ func (t *TensorInfo) Reader() (io.Reader, error) {
 func (t *TensorInfo) Size() int64 {
 	return t.Type.dataSize(t.Dimensions)
 }
+
+// ValuesCount возвращает число элементов тензора
+func (t *TensorInfo) ValuesCount() int64 {
+	n := uint64(1)
+	for _, d := range t.Dimensions {
+		n *= d
+	}
+
+	return int64(n)
+}
