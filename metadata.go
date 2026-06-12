@@ -23,6 +23,21 @@ func (m Metadata) String(name string) (string, error) {
 	return MetaValue[string](m, name)
 }
 
+// StringArray возвращает массив строк из метаданных
+func (m Metadata) StringArray(name string) ([]string, error) {
+	return MetaValue[[]string](m, name)
+}
+
+// IntOptional возвращает int из метаданных или defaultVal, если ключ отсутствует
+func (m Metadata) IntOptional(name string, defaultVal int) int {
+	v, err := m.Int(name)
+	if err != nil {
+		return defaultVal
+	}
+	
+	return v
+}
+
 // MetaValue возвращает значение метаданных с указанным именем как тип T
 // Если значение не является T, возвращается ошибка
 func MetaValue[T any](metadata Metadata, name string) (T, error) {

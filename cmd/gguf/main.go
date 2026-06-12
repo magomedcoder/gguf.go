@@ -8,8 +8,9 @@ import (
 const usage = `gguf - система запуска GGUF-моделей на Go (gguf.go)
 
 Использование:
-  gguf inspect файл.gguf просмотр метаданных и тензоров
-  gguf info -m файл.gguf краткая информация о модели
+  gguf inspect файл.gguf          просмотр метаданных и тензоров
+  gguf info -m файл.gguf          краткая информация о модели
+  gguf run -m файл.gguf -p "..."  генерация текста
 `
 
 // main - точка входа CLI gguf
@@ -31,6 +32,11 @@ func main() {
 		}
 	case "info":
 		if err := runInfo(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "run":
+		if err := runRun(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
