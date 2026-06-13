@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand/v2"
 	"os"
 
 	"github.com/magomedcoder/gguf.go/runtime"
@@ -16,18 +15,26 @@ func runRun(args []string) error {
 	modelPath := fs.String("m", "", "путь к файлу GGUF")
 	prompt := fs.String("p", "", "текст промпта")
 	maxTokens := fs.Int("n", 128, "максимум новых токенов")
-	temp := fs.Float64("temp", 0, "температура sampling (0 = greedy)")
+	temp := fs.Float64("temp", 0, "температура (0 = greedy)")
+	topK := fs.Int("top-k", 0, "top-k sampling (0 = выключено)")
+	topP := fs.Float64("top-p", 1, "top-p nucleus sampling (1 = выключено)")
+	seed := fs.Uint64("seed", 0, "seed PRNG для sampling")
+	chat := fs.Bool("chat", false, "обернуть промпт в Qwen chat template")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	if *modelPath == "" {
-		return fmt.Errorf("использование: gguf run -m файл.gguf -p \"промпт\" [-n 128] [--temp 0.7]")
+		return fmt.Errorf("использование: gguf run -m файл.gguf -p \"промпт\" [-n 128] [--temp 0.7] [--top-k 40] [--top-p 0.9] [--seed 42]")
 	}
-	
 	if *prompt == "" {
 		return fmt.Errorf("укажите промпт через -p")
+	}
+
+	promptText := *prompt
+	if *chat {
+		promptText = "<|im_start|>user\n" + promptText + "\n<|im_start|>assistant\n"
 	}
 
 	engine, err := runtime.Load(*modelPath)
@@ -40,10 +47,14 @@ func runRun(args []string) error {
 		return err
 	}
 
-	rng := rand.New(rand.NewPCG(0, 0))
-	samp := sampler.Temperature(float32(*temp), rng)
+	samp := sampler.New(sampler.Config{
+		Temp: float32(*temp),
+		TopK: *topK,
+		TopP: float32(*topP),
+		Seed: *seed,
+	})
 
-	err = ctx.GenerateStream(*prompt, runtime.GenerateParams{
+	err = ctx.GenerateStream(promptText, runtime.GenerateParams{
 		MaxTokens: *maxTokens,
 		Sampler:   samp,
 	}, os.Stdout)

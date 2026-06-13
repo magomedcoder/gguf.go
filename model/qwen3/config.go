@@ -68,8 +68,17 @@ func ParseConfig(r *gguf.Reader) (Config, error) {
 	}
 
 	headDim := emb / heads
-	if headDim*heads != emb {
-		return Config{}, fmt.Errorf("qwen3: embedding_length не делится на head_count")
+	if v, err := getInt("attention.key_length"); err == nil && v > 0 {
+		headDim = v
+	}
+
+	if heads*headDim != emb {
+		// Qwen3 - Q-проекция шире embedding (GQA + qk norm)
+		qOut := heads * headDim
+		if qOut <= 0 {
+			return Config{}, fmt.Errorf("qwen3: некорректный head_dim=%d", headDim)
+		}
+		_ = qOut
 	}
 
 	vocab, err := vocabSize(r, emb)

@@ -109,6 +109,16 @@ func (m *Model) forwardBlock(layer int, x []float32, pos int) ([]float32, error)
 		return nil, err
 	}
 
+	q, err = m.normHeads(q, p+"attn_q_norm.weight", m.cfg.NumHeads)
+	if err != nil {
+		return nil, err
+	}
+
+	k, err = m.normHeads(k, p+"attn_k_norm.weight", m.cfg.NumKVHeads)
+	if err != nil {
+		return nil, err
+	}
+
 	applyRoPEHeads(q, m.cfg.NumHeads, m.cfg.HeadDim, pos, m.cfg.RopeFreqBase)
 	applyRoPEHeads(k, m.cfg.NumKVHeads, m.cfg.HeadDim, pos, m.cfg.RopeFreqBase)
 
@@ -120,7 +130,7 @@ func (m *Model) forwardBlock(layer int, x []float32, pos int) ([]float32, error)
 		return nil, err
 	}
 
-	attnOut, err := m.matmul(p+"attn_output.weight", m.cfg.EmbeddingDim, m.cfg.EmbeddingDim, attn)
+	attnOut, err := m.matmul(p+"attn_output.weight", m.cfg.EmbeddingDim, m.cfg.NumHeads*m.cfg.HeadDim, attn)
 	if err != nil {
 		return nil, err
 	}
@@ -226,4 +236,27 @@ func applyRoPEHeads(v []float32, nHeads, headDim, pos int, freqBase float32) {
 		off := h * headDim
 		ops.ApplyRoPE(v[off:off+headDim], pos, freqBase)
 	}
+}
+
+func (m *Model) normHeads(v []float32, weightName string, nHeads int) ([]float32, error) {
+	weight, err := m.weights.Floats(weightName)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(weight) != m.cfg.HeadDim {
+		return nil, fmt.Errorf("qwen3: %s: len=%d, head_dim=%d", weightName, len(weight), m.cfg.HeadDim)
+	}
+
+	out := make([]float32, len(v))
+	for h := 0; h < nHeads; h++ {
+		off := h * m.cfg.HeadDim
+		normed, err := ops.RMSNorm(v[off:off+m.cfg.HeadDim], weight, m.cfg.RMSNormEps)
+		if err != nil {
+			return nil, err
+		}
+		copy(out[off:off+m.cfg.HeadDim], normed)
+	}
+
+	return out, nil
 }

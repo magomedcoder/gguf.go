@@ -9,20 +9,24 @@ import (
 	"github.com/magomedcoder/gguf.go"
 )
 
-// pretokenizePattern - GPT-2 BPE pretokenizer (без lookahead - RE2)
 var pretokenizePattern = regexp.MustCompile(`(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+`)
 
 type mergePair struct {
 	a, b string
 }
 
+type pretokenizeFunc func(string) []string
+
 // Tokenizer кодирует текст в token IDs и обратно
 type Tokenizer struct {
-	tokens []string
-	id     map[string]int
-	merges map[mergePair]int
-	bosID  int
-	eosID  int
+	tokens      []string
+	id          map[string]int
+	merges      map[mergePair]int
+	bosID       int
+	eosID       int
+	byteEncode  bool
+	pretokenize pretokenizeFunc
+	special     []string
 }
 
 // FromGGUF создаёт tokenizer из метаданных GGUF-файла
@@ -62,13 +66,42 @@ func loadBPE(r *gguf.Reader) (*Tokenizer, error) {
 		}
 	}
 
+	preType, _ := r.Metadata.String("tokenizer.ggml.pre")
+	pt := pretokenizeGPT2
+	switch preType {
+	case "qwen2", "qwen35":
+		pt = pretokenizeQwen2
+	}
+
 	return &Tokenizer{
-		tokens: tokens,
-		id:     id,
-		merges: merges,
-		bosID:  r.Metadata.IntOptional("tokenizer.ggml.bos_token_id", -1),
-		eosID:  r.Metadata.IntOptional("tokenizer.ggml.eos_token_id", -1),
+		tokens:      tokens,
+		id:          id,
+		merges:      merges,
+		bosID:       r.Metadata.IntOptional("tokenizer.ggml.bos_token_id", -1),
+		eosID:       r.Metadata.IntOptional("tokenizer.ggml.eos_token_id", -1),
+		byteEncode:  true,
+		pretokenize: pt,
 	}, nil
+}
+
+func (t *Tokenizer) encodeSegment(text string) ([]int, error) {
+	var out []int
+	for _, piece := range t.pretokenize(text) {
+		word := piece
+		if t.byteEncode {
+			word = byteEncodeWord(piece)
+		}
+
+		for _, sym := range t.bpe(word) {
+			id, ok := t.id[sym]
+			if !ok {
+				return nil, fmt.Errorf("tokenizer: неизвестный токен %q", sym)
+			}
+			out = append(out, id)
+		}
+	}
+
+	return out, nil
 }
 
 // BOS возвращает ID токена начала последовательности
@@ -92,15 +125,20 @@ func (t *Tokenizer) Encode(text string) ([]int, error) {
 		return nil, nil
 	}
 
+	t.buildSpecialTokens()
+
 	var out []int
-	for _, piece := range pretokenizePattern.FindAllString(text, -1) {
-		for _, sym := range t.bpe(piece) {
-			id, ok := t.id[sym]
-			if !ok {
-				return nil, fmt.Errorf("tokenizer: неизвестный токен %q", sym)
-			}
-			out = append(out, id)
+	for _, seg := range splitBySpecial(text, t.special) {
+		if seg.isSpecial {
+			out = append(out, t.id[seg.text])
+			continue
 		}
+
+		ids, err := t.encodeSegment(seg.text)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ids...)
 	}
 
 	return out, nil
@@ -115,12 +153,14 @@ func (t *Tokenizer) Decode(ids []int) string {
 		}
 		b.WriteString(t.decodeToken(t.tokens[id]))
 	}
-
 	return b.String()
 }
 
 func (t *Tokenizer) decodeToken(tok string) string {
-	// GPT-2 пробел кодируется префиксом Ġ
+	if t.byteEncode {
+		return byteDecodeToken(tok)
+	}
+
 	return strings.ReplaceAll(tok, "Ġ", " ")
 }
 
@@ -166,11 +206,12 @@ func utf8Symbols(s string) []string {
 		return nil
 	}
 
-	n := utf8.RuneCountInString(s)
-	out := make([]string, 0, n)
-	for _, r := range s {
-		out = append(out, string(r))
+	var out []string
+	for i := 0; i < len(s); {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		out = append(out, s[i:i+size])
+		i += size
 	}
-
+	
 	return out
 }
