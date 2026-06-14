@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/magomedcoder/gguf.go/runtime"
-	"github.com/magomedcoder/gguf.go/sampler"
+	"github.com/magomedcoder/gguf.go"
 )
 
 // runRun выполняет генерацию текста
@@ -37,7 +36,7 @@ func runRun(args []string) error {
 		promptText = "<|im_start|>user\n" + promptText + "\n<|im_start|>assistant\n"
 	}
 
-	engine, err := runtime.Load(*modelPath)
+	engine, err := gguf.Load(*modelPath)
 	if err != nil {
 		return err
 	}
@@ -47,14 +46,14 @@ func runRun(args []string) error {
 		return err
 	}
 
-	samp := sampler.New(sampler.Config{
+	samp := gguf.NewSampler(gguf.SamplerConfig{
 		Temp: float32(*temp),
 		TopK: *topK,
 		TopP: float32(*topP),
 		Seed: *seed,
 	})
 
-	err = ctx.GenerateStream(promptText, runtime.GenerateParams{
+	err = ctx.GenerateStream(promptText, gguf.GenerateParams{
 		MaxTokens: *maxTokens,
 		Sampler:   samp,
 	}, os.Stdout)

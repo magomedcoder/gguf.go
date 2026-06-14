@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/magomedcoder/gguf.go/runtime"
-	"github.com/magomedcoder/gguf.go/sampler"
+	"github.com/magomedcoder/gguf.go"
 )
 
 func main() {
@@ -14,7 +13,7 @@ func main() {
 		path = os.Args[1]
 	}
 
-	engine, err := runtime.Load(path)
+	engine, err := gguf.Load(path)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +52,7 @@ func main() {
 		fmt.Printf("  %d: %.4f %q\n", t.id, t.score, tok.Decode([]int{t.id}))
 	}
 
-	next := sampler.Greedy(logits)
+	next := gguf.Greedy(logits)
 	fmt.Printf("greedy next = %d %q\n", next, tok.Decode([]int{next}))
 }
 
@@ -68,7 +67,7 @@ func topN(logits []float32, n int) []scored {
 		items[i] = scored{i, v}
 	}
 
-	for i := 0; i < len(items); i++ {
+	for i := range items {
 		for j := i + 1; j < len(items); j++ {
 			if items[j].score > items[i].score {
 				items[i], items[j] = items[j], items[i]
@@ -79,6 +78,6 @@ func topN(logits []float32, n int) []scored {
 	if n > len(items) {
 		n = len(items)
 	}
-	
+
 	return items[:n]
 }

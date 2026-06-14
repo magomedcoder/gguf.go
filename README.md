@@ -13,8 +13,8 @@
 - парсинг GGUF v2/v3 (`info`, `inspect`);
 - деквантизация Q8_0, загрузка весов (`quant`, `tensor`, `weights`);
 - базовые ops: RoPE, RMSNorm, GQA attention, SwiGLU;
-- forward pass Qwen3 + KV-cache (`model/qwen3`, `runtime`);
-- tokenizer BPE из метаданных GGUF (`tokenizer`);
+- forward pass Qwen3 + KV-cache (`pkg/model/qwen3`, `pkg/runtime`);
+- tokenizer BPE из метаданных GGUF (`pkg/tokenizer`);
 - генерация текста: `gguf run` (prefill + greedy/temperature/top-k/top-p);
 - Qwen3 Instruct: `--chat` для chat template.
 
@@ -136,3 +136,24 @@ Hello
 go run ./cmd/vocab ./models/Qwen3-0.6B-Q8_0.gguf
 ```
 
+---
+
+### Использование как библиотеки
+
+```go
+import "github.com/magomedcoder/gguf.go"
+
+// Парсинг файла
+r, err := gguf.OpenFile("./models/Qwen3-0.6B-Q8_0.gguf")
+
+// Inference
+engine, err := gguf.Load("./models/Qwen3-0.6B-Q8_0.gguf")
+ctx, err := engine.NewContext()
+text, err := ctx.Generate("Привет", gguf.GenerateParams{
+    MaxTokens: 128,
+    Sampler:   gguf.Greedy,
+})
+```
+
+Реализация разбита по пакетам в pkg/ (format, quant, ops, model, runtime и тд).
+Их можно импортировать напрямую при расширении или отладке.

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/magomedcoder/gguf.go"
-	"github.com/magomedcoder/gguf.go/model/qwen3"
+	"github.com/magomedcoder/gguf.go/pkg/model/qwen3"
 )
 
 func main() {
