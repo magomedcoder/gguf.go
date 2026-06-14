@@ -4,7 +4,7 @@
 
 **gguf.go** - лёгковесный способ запуска GGUF-моделей на языке Go без использования llama.cpp.
 
-Формат **GGUF** используется в экосистеме llama.cpp. 
+Формат **GGUF** используется в экосистеме llama.cpp.
 
 ---
 
@@ -28,9 +28,40 @@ mkdir -p models
 curl -L -o models/Qwen3-0.6B-Q8_0.gguf https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf
 ```
 
+---
+
+### Сборка локально (Go 1.26)
+
 ```bash
 go build -o build/gguf ./cmd/gguf
 ```
+
+### Сборка через Docker (Linux, macOS, Windows)
+
+Кросс-компиляция всех платформ в одном образе:
+
+```bash
+docker build -t gguf-build .
+
+docker run --rm -v "$(pwd)/build:/out" gguf-build
+```
+
+Результат в `build/`:
+
+| Платформа     | Файл                           |
+|---------------|--------------------------------|
+| Linux amd64   | `build/linux-amd64/gguf`       |
+| Linux arm64   | `build/linux-arm64/gguf`       |
+| Windows amd64 | `build/windows-amd64/gguf.exe` |
+| Windows arm64 | `build/windows-arm64/gguf.exe` |
+| macOS amd64   | `build/darwin-amd64/gguf`      |
+| macOS arm64   | `build/darwin-arm64/gguf`      |
+
+> **Примечание.** Путь к бинарнику зависит от способа сборки:
+> - локально: `./build/gguf`
+> - через Docker укажите платформу - `./build/<os>-<arch>/gguf` (на Linux amd64: `./build/linux-amd64/gguf`, на macOS arm64: `./build/darwin-arm64/gguf`, на Windows: `./build/windows-amd64/gguf.exe`)
+
+---
 
 ### `gguf info`
 
@@ -40,8 +71,8 @@ go build -o build/gguf ./cmd/gguf
 ./build/gguf info -m ./models/Qwen3-0.6B-Q8_0.gguf
 ```
 
-| Флаг | Описание |
-|------|----------|
+| Флаг | Описание             |
+|------|----------------------|
 | `-m` | путь к файлу `.gguf` |
 
 ### `gguf inspect`
@@ -52,7 +83,7 @@ go build -o build/gguf ./cmd/gguf
 ./build/gguf inspect ./models/Qwen3-0.6B-Q8_0.gguf
 ```
 
-Аргумент — путь к файлу, без флагов.
+Аргумент - путь к файлу, без флагов.
 
 ### `gguf run`
 
@@ -62,16 +93,16 @@ go build -o build/gguf ./cmd/gguf
 ./build/gguf run -m ./models/Qwen3-0.6B-Q8_0.gguf --chat -p "Привет" -n 64
 ```
 
-| Флаг | По умолчанию | Описание |
-|------|--------------|----------|
-| `-m` | — | путь к файлу `.gguf` |
-| `-p` | — | текст промпта |
-| `-n` | `128` | максимум новых токенов |
-| `--temp` | `0` | температура sampling (`0` = greedy) |
-| `--top-k` | `0` | top-k (`0` = выключено) |
-| `--top-p` | `1` | nucleus sampling (`1` = выключено) |
-| `--seed` | `0` | seed PRNG |
-| `--chat` | `false` | обернуть промпт в Qwen chat template |
+| Флаг      | По умолчанию | Описание                             |
+|-----------|--------------|--------------------------------------|
+| `-m`      | -            | путь к файлу `.gguf`                 |
+| `-p`      | -            | текст промпта                        |
+| `-n`      | `128`        | максимум новых токенов               |
+| `--temp`  | `0`          | температура sampling (`0` = greedy)  |
+| `--top-k` | `0`          | top-k (`0` = выключено)              |
+| `--top-p` | `1`          | nucleus sampling (`1` = выключено)   |
+| `--seed`  | `0`          | seed PRNG                            |
+| `--chat`  | `false`      | обернуть промпт в Qwen chat template |
 
 Для **Qwen3 Instruct** используйте `--chat`, иначе модель ответит некорректно.
 
