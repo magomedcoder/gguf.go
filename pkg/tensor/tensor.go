@@ -17,7 +17,16 @@ type Tensor struct {
 	Raw   []byte
 }
 
-// LoadRaw читает сырые байты тензора из GGUF-файла
+// LoadRawView возвращает срез сырых байт тензора без копирования, если источник поддерживает mmap/ReaderAt
+func LoadRawView(info *format.TensorInfo) ([]byte, error) {
+	if view, ok := info.RawView(); ok {
+		return view, nil
+	}
+
+	return LoadRaw(info)
+}
+
+// LoadRaw читает сырые байты тензора из GGUF-файла.
 func LoadRaw(info *format.TensorInfo) ([]byte, error) {
 	r, err := info.Reader()
 	if err != nil {

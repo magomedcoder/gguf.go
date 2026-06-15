@@ -6,17 +6,22 @@
 
 Формат **GGUF** используется в экосистеме llama.cpp.
 
----
+[GGUF-FORMAT.md](GGUF-FORMAT.md) - описание формата GGUF
+
+Проект можно использовать как **библиотеку** (inference из Go-кода) и как **HTTP-сервер** (`gguf serve` или пакет `server`).
+
+**Внешних зависимостей нет** - только стандартная библиотека Go.
 
 ## Что уже работает
 
-- парсинг GGUF v2/v3 (`info`, `inspect`);
-- деквантизация Q8_0, загрузка весов (`quant`, `tensor`, `weights`);
+- парсинг GGUF v2/v3 (`info`, `inspect`), memory-map (`LoadMapped`);
+- деквантизация Q8_0, Q4_0, Q4_K;
 - базовые ops: RoPE, RMSNorm, GQA attention, SwiGLU;
-- forward pass Qwen3 + KV-cache (`pkg/model/qwen3`, `pkg/runtime`);
-- tokenizer BPE из метаданных GGUF (`pkg/tokenizer`);
-- генерация текста: `gguf run` (prefill + greedy/temperature/top-k/top-p);
-- Qwen3 Instruct: `--chat` для chat template.
+- forward pass Qwen3 + KV-cache;
+- tokenizer BPE из метаданных GGUF;
+- chat template ChatML/Qwen (`--chat`, `FormatChatUser`);
+- генерация текста: `gguf run` (prefill + greedy / temperature / top-k / top-p);
+- HTTP-сервер: `gguf serve` (JSON + SSE streaming).
 
 ---
 
@@ -30,13 +35,15 @@ curl -L -o models/Qwen3-0.6B-Q8_0.gguf https://huggingface.co/Qwen/Qwen3-0.6B-GG
 
 ---
 
-### Сборка локально (Go 1.26)
+## Сборка
+
+### Локально (Go 1.26)
 
 ```bash
 go build -o build/gguf ./cmd/gguf
 ```
 
-### Сборка через Docker (Linux, macOS, Windows)
+### Через Docker (Linux, macOS, Windows)
 
 Кросс-компиляция всех платформ в одном образе:
 
@@ -59,9 +66,11 @@ docker run --rm -v "$(pwd)/build:/out" gguf-build
 
 > **Примечание.** Путь к бинарнику зависит от способа сборки:
 > - локально: `./build/gguf`
-> - через Docker укажите платформу - `./build/<os>-<arch>/gguf` (на Linux amd64: `./build/linux-amd64/gguf`, на macOS arm64: `./build/darwin-arm64/gguf`, на Windows: `./build/windows-amd64/gguf.exe`)
+> - через Docker: `./build/<os>-<arch>/gguf` (на Windows: `gguf.exe`)
 
 ---
+
+## CLI
 
 ### `gguf info`
 
@@ -93,16 +102,17 @@ docker run --rm -v "$(pwd)/build:/out" gguf-build
 ./build/gguf run -m ./models/Qwen3-0.6B-Q8_0.gguf --chat -p "Привет" -n 64
 ```
 
-| Флаг      | По умолчанию | Описание                             |
-|-----------|--------------|--------------------------------------|
-| `-m`      | -            | путь к файлу `.gguf`                 |
-| `-p`      | -            | текст промпта                        |
-| `-n`      | `128`        | максимум новых токенов               |
-| `--temp`  | `0`          | температура sampling (`0` = greedy)  |
-| `--top-k` | `0`          | top-k (`0` = выключено)              |
-| `--top-p` | `1`          | nucleus sampling (`1` = выключено)   |
-| `--seed`  | `0`          | seed PRNG                            |
-| `--chat`  | `false`      | обернуть промпт в Qwen chat template |
+| Флаг         | По умолчанию | Описание                               |
+|--------------|--------------|----------------------------------------|
+| `-m`         | -            | путь к файлу `.gguf`                   |
+| `-p`         | -            | текст промпта                          |
+| `-n`         | `128`        | максимум новых токенов                 |
+| `--temp`     | `0`          | температура sampling (`0` = greedy)    |
+| `--top-k`    | `0`          | top-k (`0` = выключено)                |
+| `--top-p`    | `1`          | nucleus sampling (`1` = выключено)     |
+| `--seed`     | `0`          | seed PRNG                              |
+| `--chat`     | `false`      | обернуть промпт в ChatML/Qwen template |
+| `--thinking` | `false`      | режим размышления Qwen3 (с `--chat`)   |
 
 Для **Qwen3 Instruct** используйте `--chat`, иначе модель ответит некорректно.
 
@@ -112,11 +122,72 @@ docker run --rm -v "$(pwd)/build:/out" gguf-build
 ./build/gguf run -m ./models/Qwen3-0.6B-Q8_0.gguf --chat -p "Привет" -n 64 --temp 0.7 --top-k 40 --top-p 0.9 --seed 42
 ```
 
+С размышлением:
+
+```bash
+./build/gguf run -m ./models/Qwen3-0.6B-Q8_0.gguf --chat --thinking -p "Привет" -n 64
+```
+
+### `gguf serve`
+
+HTTP-сервер для генерации текста по API.
+
+Graceful shutdown по `Ctrl+C` (SIGINT/SIGTERM).
+
+```bash
+./build/gguf serve -m ./models/Qwen3-0.6B-Q8_0.gguf --addr 127.0.0.1:8000
+```
+
+| Флаг     | По умолчанию     | Описание             |
+|----------|------------------|----------------------|
+| `-m`     | -                | путь к файлу `.gguf` |
+| `--addr` | `127.0.0.1:8000` | адрес HTTP-сервера   |
+
+#### API
+
+| Метод | Путь        | Описание                        |
+|-------|-------------|---------------------------------|
+| POST  | `/generate` | генерация текста (JSON или SSE) |
+
+Тело `POST /generate` (`Content-Type: application/json`):
+
+| Поле              | Тип    | По умолчанию | Описание                    |
+|-------------------|--------|--------------|-----------------------------|
+| `prompt`          | string | -            | текст запроса (обязательно) |
+| `max_tokens`      | int    | `128`        | максимум новых токенов      |
+| `temperature`     | float  | `0`          | `0` = greedy                |
+| `top_k`           | int    | `0`          | top-k sampling              |
+| `top_p`           | float  | `1`          | nucleus sampling            |
+| `seed`            | uint   | `0`          | seed PRNG                   |
+| `chat`            | bool   | `false`      | ChatML/Qwen template        |
+| `stream`          | bool   | `false`      | SSE streaming               |
+| `system`          | string | -            | system prompt (с `chat`)    |
+| `thinking`        | bool   | `false`      | режим размышления Qwen3     |
+
+Ответ без stream:
+
+```json
+{
+  "text": "...",
+  "tokens": 32
+}
+```
+
+Streaming (SSE) - события `data: {"token":"..."}` и в конце `data: {"done":true}`.
+
+Примеры:
+
+```bash
+curl -s localhost:8000/generate -H 'Content-Type: application/json' -d '{"prompt":"Привет","chat":true,"thinking":true,"max_tokens":32}'
+
+curl -N localhost:8000/generate -H 'Content-Type: application/json' -d '{"prompt":"Привет","chat":true,"stream":true,"max_tokens":32}'
+```
+
 ---
 
-### Утилиты для отладки
+## Утилиты для отладки
 
-#### `debugtok`
+### `debugtok`
 
 Проверяет encode промпта и logits после prefill: top-5 токенов и greedy-следующий.
 
@@ -128,9 +199,9 @@ Hello
 '
 ```
 
-#### `vocab`
+### `vocab`
 
-Показывает конфиг Qwen3 (`head_dim`, число heads) и ID special tokens в словаре (`<|im_start|>`, `<|endoftext|>`, etc.).
+Показывает конфиг Qwen3 (`head_dim`, число heads) и ID special tokens в словаре.
 
 ```bash
 go run ./cmd/vocab ./models/Qwen3-0.6B-Q8_0.gguf
@@ -138,22 +209,56 @@ go run ./cmd/vocab ./models/Qwen3-0.6B-Q8_0.gguf
 
 ---
 
-### Использование как библиотеки
+## Использование как библиотеки
+
+### Inference
 
 ```go
 import "github.com/magomedcoder/gguf.go"
 
-// Парсинг файла
-r, err := gguf.OpenFile("./models/Qwen3-0.6B-Q8_0.gguf")
-
-// Inference
 engine, err := gguf.Load("./models/Qwen3-0.6B-Q8_0.gguf")
 ctx, err := engine.NewContext()
-text, err := ctx.Generate("Привет", gguf.GenerateParams{
-    MaxTokens: 128,
-    Sampler:   gguf.Greedy,
+
+prompt, err := gguf.FormatChatUser("Привет", gguf.ChatOptions{
+  Metadata: engine.Metadata(),
+})
+text, err := ctx.Generate(prompt, gguf.GenerateParams{
+  MaxTokens: 128,
+  Sampler:   gguf.Greedy,
 })
 ```
 
 Реализация разбита по пакетам в pkg/ (format, quant, ops, model, runtime и тд).
+
 Их можно импортировать напрямую при расширении или отладке.
+
+### Sampling с temperature / top-k / top-p
+
+```go
+sampler := gguf.NewSampler(gguf.SamplerConfig{
+  Temp: 0.7,
+  TopK: 40,
+  TopP: 0.9,
+  Seed: 42,
+})
+text, err := ctx.Generate(prompt, gguf.GenerateParams{
+  MaxTokens: 64,
+  Sampler:   sampler,
+})
+```
+
+### Загрузка через mmap (zero-copy веса)
+
+```go
+engine, err := gguf.LoadMapped("./models/Qwen3-0.6B-Q8_0.gguf")
+```
+
+### Парсинг GGUF без inference
+
+```go
+import "github.com/magomedcoder/gguf.go"
+
+r, err := gguf.OpenFile("./models/Qwen3-0.6B-Q8_0.gguf")
+
+arch, _ := r.Metadata.String("general.architecture")
+```

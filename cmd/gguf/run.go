@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/magomedcoder/gguf.go"
+	chattmpl "github.com/magomedcoder/gguf.go/pkg/chat"
 )
 
 // runRun выполняет генерацию текста
@@ -19,6 +20,7 @@ func runRun(args []string) error {
 	topP := fs.Float64("top-p", 1, "top-p nucleus sampling (1 = выключено)")
 	seed := fs.Uint64("seed", 0, "seed PRNG для sampling")
 	chat := fs.Bool("chat", false, "обернуть промпт в Qwen chat template")
+	thinking := fs.Bool("thinking", false, "Qwen3: включить режим размышления (с --chat)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -32,13 +34,21 @@ func runRun(args []string) error {
 	}
 
 	promptText := *prompt
-	if *chat {
-		promptText = "<|im_start|>user\n" + promptText + "\n<|im_start|>assistant\n"
-	}
 
 	engine, err := gguf.Load(*modelPath)
 	if err != nil {
 		return err
+	}
+
+	if *chat {
+		var err error
+		promptText, err = chattmpl.FormatUser(*prompt, chattmpl.Options{
+			Metadata: engine.Metadata(),
+			Thinking: thinking,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	ctx, err := engine.NewContext()

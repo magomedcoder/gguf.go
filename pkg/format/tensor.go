@@ -12,6 +12,22 @@ type TensorInfo struct {
 	Offset     uint64
 }
 
+// RawView возвращает zero-copy срез данных тензора, если источник - mmap или []byte
+func (t *TensorInfo) RawView() ([]byte, bool) {
+	start := t.reader.tensorOffset + int64(t.Offset)
+	size := t.Size()
+
+	if dr, ok := t.reader.r.(dataReader); ok {
+		return dr.Slice(start, size), true
+	}
+
+	return nil, false
+}
+
+type dataReader interface {
+	Slice(off, size int64) []byte
+}
+
 // Reader возвращает io.Reader для чтения данных тензора
 // Читатель ограничен размером данных тензора и не меняет позицию исходного файла
 func (t *TensorInfo) Reader() (io.Reader, error) {

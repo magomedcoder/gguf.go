@@ -11,6 +11,7 @@ const usage = `gguf - система запуска GGUF-моделей на Go 
   gguf inspect файл.gguf          просмотр метаданных и тензоров
   gguf info -m файл.gguf          краткая информация о модели
   gguf run -m файл.gguf -p "..."  генерация текста
+  gguf serve -m файл.gguf         HTTP API (SSE streaming)
 `
 
 // main - точка входа CLI gguf
@@ -37,6 +38,11 @@ func main() {
 		}
 	case "run":
 		if err := runRun(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "serve":
+		if err := runServe(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

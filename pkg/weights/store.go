@@ -38,7 +38,7 @@ func (s *Store) Raw(name string) ([]byte, error) {
 		return nil, err
 	}
 
-	b, err := tensor.LoadRaw(info)
+	b, err := tensor.LoadRawView(info)
 	if err != nil {
 		return nil, fmt.Errorf("weights %q: %w", name, err)
 	}

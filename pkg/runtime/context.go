@@ -38,6 +38,11 @@ func (c *Context) Encode(text string) ([]int, error) {
 	return c.tok.Encode(text)
 }
 
+// DecodeToken преобразует один token ID в текст
+func (c *Context) DecodeToken(id int) string {
+	return c.tok.Decode([]int{id})
+}
+
 // Generate выполняет prefill + decode и возвращает сгенерированный текст
 func (c *Context) Generate(prompt string, params GenerateParams) (string, error) {
 	if params.Sampler == nil {

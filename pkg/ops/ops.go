@@ -64,6 +64,78 @@ func MatMulVecQ8_0(raw []byte, rows, cols int, vec []float32) ([]float32, error)
 	return out, nil
 }
 
+// MatMulVecQ4_0 умножает Q4_0-матрицу [rows×cols] на float32-вектор [cols]
+func MatMulVecQ4_0(raw []byte, rows, cols int, vec []float32) ([]float32, error) {
+	if len(vec) != cols {
+		return nil, fmt.Errorf("ops: len(vec)=%d, cols=%d", len(vec), cols)
+	}
+
+	if cols%quant.QK4_0 != 0 {
+		return nil, fmt.Errorf("ops: cols=%d не кратно %d", cols, quant.QK4_0)
+	}
+
+	blocksPerRow := cols / quant.QK4_0
+	want := rows * blocksPerRow * quant.BlockQ4_0Size
+	if len(raw) < want {
+		return nil, fmt.Errorf("ops: Q4_0 matrix слишком короткая")
+	}
+
+	out := make([]float32, rows)
+	for r := range rows {
+		var sum float32
+		rowOff := r * blocksPerRow * quant.BlockQ4_0Size
+		for b := range blocksPerRow {
+			block := raw[rowOff+b*quant.BlockQ4_0Size:]
+			vecOff := b * quant.QK4_0
+			dot, err := quant.DotBlockQ4_0(block, vec[vecOff:vecOff+quant.QK4_0])
+			if err != nil {
+				return nil, err
+			}
+			sum += dot
+		}
+		out[r] = sum
+	}
+
+	return out, nil
+}
+
+// MatMulVecQ4_K умножает Q4_K-матрицу [rows×cols] на float32-вектор [cols]
+func MatMulVecQ4_K(raw []byte, rows, cols int, vec []float32) ([]float32, error) {
+	if len(vec) != cols {
+		return nil, fmt.Errorf("ops: len(vec)=%d, cols=%d", len(vec), cols)
+	}
+
+	if cols%quant.QK_K != 0 {
+		return nil, fmt.Errorf("ops: cols=%d не кратно %d", cols, quant.QK_K)
+	}
+
+	blocksPerRow := cols / quant.QK_K
+	want := rows * blocksPerRow * quant.BlockQ4_KSize
+	if len(raw) < want {
+		return nil, fmt.Errorf("ops: Q4_K matrix слишком короткая")
+	}
+
+	out := make([]float32, rows)
+	for r := range rows {
+		var sum float32
+		rowOff := r * blocksPerRow * quant.BlockQ4_KSize
+		for b := range blocksPerRow {
+			block := raw[rowOff+b*quant.BlockQ4_KSize:]
+			vecOff := b * quant.QK_K
+			dot, err := quant.DotBlockQ4_K(block, vec[vecOff:vecOff+quant.QK_K])
+			if err != nil {
+				return nil, err
+			}
+
+			sum += dot
+		}
+
+		out[r] = sum
+	}
+
+	return out, nil
+}
+
 // RMSNorm применяет RMS-нормализацию: x * weight / RMS(x)
 func RMSNorm(x, weight []float32, eps float32) ([]float32, error) {
 	if len(x) != len(weight) {

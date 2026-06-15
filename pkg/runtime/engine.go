@@ -10,6 +10,16 @@ import (
 type Engine struct {
 	Model model.Model
 	tok   *tokenizer.Tokenizer
+	meta  format.Metadata
+}
+
+// LoadMapped загружает модель через mmap (zero-copy веса)
+func LoadMapped(path string) (*Engine, error) {
+	mr, err := format.OpenFileMapped(path)
+	if err != nil {
+		return nil, err
+	}
+	return loadFromReader(mr.Reader)
 }
 
 // Load открывает GGUF-файл и загружает модель
@@ -18,7 +28,10 @@ func Load(path string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	return loadFromReader(r)
+}
 
+func loadFromReader(r *format.Reader) (*Engine, error) {
 	m, err := model.Load(r)
 	if err != nil {
 		return nil, err
@@ -32,7 +45,13 @@ func Load(path string) (*Engine, error) {
 	return &Engine{
 		Model: m,
 		tok:   tok,
+		meta:  r.Metadata,
 	}, nil
+}
+
+// Metadata возвращает KV-метаданные модели
+func (e *Engine) Metadata() format.Metadata {
+	return e.meta
 }
 
 // Tokenizer возвращает tokenizer модели

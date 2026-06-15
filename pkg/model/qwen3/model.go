@@ -60,12 +60,7 @@ func (m *Model) Forward(tokenIDs []int, startPos int) ([]float32, error) {
 }
 
 func (m *Model) forwardToken(tokenID, pos int) ([]float32, error) {
-	embd, err := m.weights.Raw("token_embd.weight")
-	if err != nil {
-		return nil, err
-	}
-
-	x, err := ops.EmbeddingQ8_0(embd, m.cfg.EmbeddingDim, tokenID)
+	x, err := m.embedToken(tokenID)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +74,37 @@ func (m *Model) forwardToken(tokenID, pos int) ([]float32, error) {
 	m.cache.Advance()
 
 	return x, nil
+}
+
+func (m *Model) embedToken(tokenID int) ([]float32, error) {
+	raw, err := m.weights.Raw("token_embd.weight")
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := m.weights.Info("token_embd.weight")
+	if err != nil {
+		return nil, err
+	}
+
+	switch info.Type {
+	case format.GgmlQ8_0:
+		return ops.EmbeddingQ8_0(raw, m.cfg.EmbeddingDim, tokenID)
+	case format.GgmlQ4_0:
+		return ops.EmbeddingQ4_0(raw, m.cfg.EmbeddingDim, tokenID)
+	case format.GgmlQ4_K:
+		return ops.EmbeddingQ4_K(raw, m.cfg.EmbeddingDim, tokenID)
+	default:
+		f32, err := m.weights.Floats("token_embd.weight")
+		if err != nil {
+			return nil, err
+		}
+		off := tokenID * m.cfg.EmbeddingDim
+		row := f32[off : off+m.cfg.EmbeddingDim]
+		out := make([]float32, len(row))
+		copy(out, row)
+		return out, nil
+	}
 }
 
 func (m *Model) forwardBlock(layer int, x []float32, pos int) ([]float32, error) {
@@ -181,6 +207,10 @@ func (m *Model) matmul(name string, rows, cols int, vec []float32) ([]float32, e
 	switch info.Type {
 	case format.GgmlQ8_0:
 		return ops.MatMulVecQ8_0(raw, rows, cols, vec)
+	case format.GgmlQ4_0:
+		return ops.MatMulVecQ4_0(raw, rows, cols, vec)
+	case format.GgmlQ4_K:
+		return ops.MatMulVecQ4_K(raw, rows, cols, vec)
 	default:
 		f32, err := m.weights.Floats(name)
 		if err != nil {
@@ -221,6 +251,10 @@ func (m *Model) logits(x []float32) ([]float32, error) {
 	switch info.Type {
 	case format.GgmlQ8_0:
 		return ops.MatMulVecQ8_0(raw, m.cfg.VocabSize, m.cfg.EmbeddingDim, x)
+	case format.GgmlQ4_0:
+		return ops.MatMulVecQ4_0(raw, m.cfg.VocabSize, m.cfg.EmbeddingDim, x)
+	case format.GgmlQ4_K:
+		return ops.MatMulVecQ4_K(raw, m.cfg.VocabSize, m.cfg.EmbeddingDim, x)
 	default:
 		f32, err := m.weights.Floats(name)
 		if err != nil {
