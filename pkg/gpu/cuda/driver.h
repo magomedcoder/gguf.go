@@ -44,6 +44,8 @@ typedef CUresult (*PFN_cuGetErrorString)(CUresult error, const char **pStr);
 
 typedef CUresult (*PFN_cuCtxSetCurrent)(CUcontext ctx);
 
+typedef CUresult (*PFN_cuDeviceGetAttribute)(int *pi, int attrib, CUdevice dev);
+
 typedef CUresult (*PFN_cuModuleLoadData)(CUmodule *module, const void *image);
 
 typedef CUresult (*PFN_cuModuleLoadDataEx)(CUmodule *module, const void *image, unsigned int numOptions, void *options, void **optionValues);
@@ -57,6 +59,7 @@ typedef struct {
 	PFN_cuDeviceGetCount cuDeviceGetCount;
 	PFN_cuDeviceGet cuDeviceGet;
 	PFN_cuDeviceGetName cuDeviceGetName;
+	PFN_cuDeviceGetAttribute cuDeviceGetAttribute;
 	PFN_cuCtxCreate_v2 cuCtxCreate;
 	PFN_cuCtxDestroy_v2 cuCtxDestroy;
 	PFN_cuMemAlloc_v2 cuMemAlloc;
@@ -72,8 +75,11 @@ typedef struct {
 	PFN_cuLaunchKernel cuLaunchKernel;
 } cuda_driver_t;
 
-// gguf_cuda_init загружает libcuda.so и создаёт контекст на GPU 0 lib_out получает handle dlopen (не закрывать до shutdown)
-int gguf_cuda_init(cuda_driver_t *drv, void **lib_out, CUcontext *ctx, char *name, size_t name_len);
+#define GGUF_CUDA_MIN_CC 60
+
+// gguf_cuda_init загружает libcuda.so и создаёт контекст на GPU 0
+// cc_out: compute capability (major*10+minor), например 120 для sm_120
+int gguf_cuda_init(cuda_driver_t *drv, void **lib_out, CUcontext *ctx, char *name, size_t name_len, char *errbuf, size_t errbuf_len, int *cc_out);
 
 // gguf_cuda_shutdown уничтожает контекст
 void gguf_cuda_shutdown(cuda_driver_t *drv, CUcontext ctx);

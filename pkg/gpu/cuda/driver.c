@@ -23,6 +23,7 @@ static int load_driver(cuda_driver_t *drv, void **lib_out) {
 	drv->cuDeviceGetCount = (PFN_cuDeviceGetCount)load_sym(lib, "cuDeviceGetCount");
 	drv->cuDeviceGet = (PFN_cuDeviceGet)load_sym(lib, "cuDeviceGet");
 	drv->cuDeviceGetName = (PFN_cuDeviceGetName)load_sym(lib, "cuDeviceGetName");
+	drv->cuDeviceGetAttribute = (PFN_cuDeviceGetAttribute)load_sym(lib, "cuDeviceGetAttribute");
 	drv->cuCtxCreate = (PFN_cuCtxCreate_v2)load_sym(lib, "cuCtxCreate_v2");
 	drv->cuCtxDestroy = (PFN_cuCtxDestroy_v2)load_sym(lib, "cuCtxDestroy_v2");
 	drv->cuMemAlloc = (PFN_cuMemAlloc_v2)load_sym(lib, "cuMemAlloc_v2");
@@ -46,22 +47,38 @@ static int load_driver(cuda_driver_t *drv, void **lib_out) {
 	return 0;
 }
 
-int gguf_cuda_init(cuda_driver_t *drv, void **lib_out, CUcontext *ctx, char *name, size_t name_len) {
+int gguf_cuda_init(cuda_driver_t *drv, void **lib_out, CUcontext *ctx, char *name, size_t name_len, char *errbuf, size_t errbuf_len, int *cc_out) {
 	void *lib = NULL;
 	memset(drv, 0, sizeof(*drv));
 
+	if (errbuf && errbuf_len > 0) {
+		errbuf[0] = '\0';
+	}
+
 	if (load_driver(drv, &lib) != 0) {
+		if (errbuf && errbuf_len > 0) {
+			snprintf(errbuf, errbuf_len, "libcuda.so не найден");
+		}
+
 		return -1;
 	}
 
 	if (drv->cuInit(0) != CUDA_SUCCESS) {
 		dlclose(lib);
+		if (errbuf && errbuf_len > 0) {
+			snprintf(errbuf, errbuf_len, "cuInit failed");
+		}
+
 		return -3;
 	}
 
 	int count = 0;
 	if (drv->cuDeviceGetCount(&count) != CUDA_SUCCESS || count <= 0) {
 		dlclose(lib);
+		if (errbuf && errbuf_len > 0) {
+			snprintf(errbuf, errbuf_len, "GPU не найдена");
+		}
+
 		return -4;
 	}
 
@@ -71,18 +88,55 @@ int gguf_cuda_init(cuda_driver_t *drv, void **lib_out, CUcontext *ctx, char *nam
 		return -5;
 	}
 
+	int cc_major = 0;
+	int cc_minor = 0;
+	if (drv->cuDeviceGetAttribute) {
+		drv->cuDeviceGetAttribute(&cc_major, 75, dev);
+		drv->cuDeviceGetAttribute(&cc_minor, 76, dev);
+	}
+
+	int cc = cc_major * 10 + cc_minor;
+	if (cc > 0 && cc < GGUF_CUDA_MIN_CC) {
+		dlclose(lib);
+		if (name && name_len > 0) {
+			snprintf(name, name_len, "GPU sm_%d.%d", cc_major, cc_minor);
+		}
+
+		if (errbuf && errbuf_len > 0) {
+			snprintf(errbuf, errbuf_len, "compute capability %d.%d < %d.%d (нужен Pascal sm_60+); используйте -ngl 0", cc_major, cc_minor, GGUF_CUDA_MIN_CC / 10, GGUF_CUDA_MIN_CC % 10);
+		}
+
+		return -7;
+	}
+
 	if (name && name_len > 0) {
-		drv->cuDeviceGetName(name, (int)name_len, dev);
+		char dev_name[256];
+		dev_name[0] = '\0';
+		drv->cuDeviceGetName(dev_name, (int)sizeof(dev_name), dev);
+		if (cc > 0) {
+			snprintf(name, name_len, "%s (sm_%d%d)", dev_name, cc_major, cc_minor);
+		} else {
+			snprintf(name, name_len, "%s", dev_name);
+		}
+
 		name[name_len - 1] = '\0';
 	}
 
 	if (drv->cuCtxCreate(ctx, 0, dev) != CUDA_SUCCESS) {
 		dlclose(lib);
+		if (errbuf && errbuf_len > 0) {
+			snprintf(errbuf, errbuf_len, "cuCtxCreate failed");
+		}
+
 		return -6;
 	}
 
 	if (lib_out) {
 		*lib_out = lib;
+	}
+
+	if (cc_out) {
+		*cc_out = cc;
 	}
 
 	return 0;
@@ -155,7 +209,11 @@ int gguf_cuda_load_module(cuda_driver_t *drv, CUcontext ctx, const char *ptx,
 		err = drv->cuModuleLoadDataEx(module, ptx, 2, opts, opt_vals);
 		if (err != CUDA_SUCCESS) {
 			if (errbuf && errbuf_len > 0) {
-				snprintf(errbuf, errbuf_len, "cuModuleLoadDataEx: %s; jit: %s", gguf_cuda_last_error(drv, err), jit_log);
+				if (jit_log[0] != '\0') {
+					snprintf(errbuf, errbuf_len, "cuModuleLoadDataEx: %s; jit: %s", gguf_cuda_last_error(drv, err), jit_log);
+				} else {
+					snprintf(errbuf, errbuf_len, "cuModuleLoadDataEx: %s (проверьте compute capability >= sm_60)", gguf_cuda_last_error(drv, err));
+				}
 			}
 			return -1;
 		}

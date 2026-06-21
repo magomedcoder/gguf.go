@@ -52,18 +52,33 @@ func Open() (*Backend, error) {
 	}
 
 	var nameBuf [256]C.char
-	rc := C.gguf_cuda_init(&b.drv, &b.lib, &b.ctx, &nameBuf[0], C.size_t(len(nameBuf)))
+	var initErr [512]C.char
+	var cc C.int
+	rc := C.gguf_cuda_init(&b.drv, &b.lib, &b.ctx, &nameBuf[0], C.size_t(len(nameBuf)), &initErr[0], C.size_t(len(initErr)), &cc)
 	if rc != 0 {
-		return nil, fmt.Errorf("cuda: init: код %d", int(rc))
+		msg := C.GoString(&initErr[0])
+		if msg == "" {
+			msg = C.GoString(&nameBuf[0])
+		}
+
+		return nil, fmt.Errorf("cuda: init: код %d: %s", int(rc), msg)
 	}
 
 	b.name = "CUDA:0 " + C.GoString(&nameBuf[0])
 
-	cptx := C.CString(kernelsPTX)
+	ptx := kernelsPTX(int(cc))
+	cptx := C.CString(ptx)
 	defer C.free(unsafe.Pointer(cptx))
 
-	var errBuf [1024]C.char
+	var errBuf [4096]C.char
 	rc = C.gguf_cuda_load_module(&b.drv, b.ctx, cptx, &b.module, &b.fn, &b.fnQ8, &errBuf[0], C.size_t(len(errBuf)))
+	if rc != 0 && int(cc) >= 120 {
+		// fallback: sm_60 PTX через forward JIT
+		ptx = kernelsPTX(60)
+		cptx2 := C.CString(ptx)
+		defer C.free(unsafe.Pointer(cptx2))
+		rc = C.gguf_cuda_load_module(&b.drv, b.ctx, cptx2, &b.module, &b.fn, &b.fnQ8, &errBuf[0], C.size_t(len(errBuf)))
+	}
 	if rc != 0 {
 		C.gguf_cuda_shutdown(&b.drv, b.ctx)
 		return nil, fmt.Errorf("cuda: load module: код %d: %s", int(rc), C.GoString(&errBuf[0]))

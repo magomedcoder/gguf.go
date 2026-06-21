@@ -2,11 +2,26 @@
 
 package cuda
 
-// kernelsPTX - FP32 matmul_vec и Q8_0 matmul_vec_q8_0 (sm_70+, f16 scale)
-const kernelsPTX = `.version 7.0
-.target sm_70
-.address_size 64
+// kernelsPTX выбирает PTX по compute capability GPU
+func kernelsPTX(cc int) string {
+	if cc >= 120 {
+		return ptxHeader120 + kernelsBody
+	}
 
+	return ptxHeader60 + kernelsBody
+}
+
+const ptxHeader60 = `.version 7.0
+.target sm_60
+.address_size 64
+`
+
+const ptxHeader120 = `.version 8.0
+.target sm_120
+.address_size 64
+`
+
+const kernelsBody = `
 .visible .entry matmul_vec(
     .param .u64 param_matrix,
     .param .u64 param_vec,
@@ -78,6 +93,7 @@ EXIT:
 {
     .reg .pred      %p<3>;
     .reg .b16       %h<1>;
+    .reg .s8        %s<1>;
     .reg .b32       %r<12>;
     .reg .b64       %rd<16>;
     .reg .f32       %f<5>;
@@ -109,8 +125,7 @@ Q8_BLOCK:
     mul.wide.u32    %rd4, %r9, 34;
     add.u64         %rd5, %rd1, %rd4;
 
-    ld.global.u16   %r10, [%rd5];
-    mov.b16         %h0, %r10;
+    ld.global.b16   %h0, [%rd5];
     cvt.rn.f32.f16  %f2, %h0;
 
     mov.u32         %r11, 0;
@@ -122,7 +137,8 @@ Q8_INNER:
     add.u64         %rd6, %rd5, 2;
     cvt.u64.u32     %rd7, %r11;
     add.u64         %rd8, %rd6, %rd7;
-    ld.global.s8    %r12, [%rd8];
+    ld.global.s8    %s0, [%rd8];
+    cvt.s32.s8      %r12, %s0;
     cvt.rn.f32.s32  %f3, %r12;
 
     mul.lo.u32      %r9, %r8, 32;
