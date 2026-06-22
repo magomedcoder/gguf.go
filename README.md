@@ -206,7 +206,6 @@ Graceful shutdown по `Ctrl+C` (SIGINT/SIGTERM).
 |-------|------------------------|---------------------------------|
 | GET   | `/models`              | метаданные загруженной модели   |
 | POST  | `/generate`            | генерация текста (JSON или SSE) |
-| POST  | `/completion`          | алиас `/generate`               |
 | POST  | `/v1/chat/completions` | chat API (messages + stream)    |
 
 Тело `POST /generate` (`Content-Type: application/json`):
