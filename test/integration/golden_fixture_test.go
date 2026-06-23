@@ -112,7 +112,10 @@ func TestGoldenFixture(t *testing.T) {
 					maxTok = len(tc.GreedyTokens)
 				}
 
-				if err := sess.GenerateSteps(maxTok, gguf.Greedy, nil); err != nil {
+				if err := sess.GenerateSteps(gguf.GenerateParams{
+					MaxTokens: maxTok,
+					Sampler:   gguf.Greedy,
+				}); err != nil {
 					t.Fatal(err)
 				}
 

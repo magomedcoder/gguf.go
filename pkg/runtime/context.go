@@ -10,9 +10,11 @@ import (
 
 // GenerateParams - параметры генерации
 type GenerateParams struct {
-	MaxTokens int
-	Sampler   sampler.Func
-	OnToken   func(tokenID int) bool
+	MaxTokens     int
+	Sampler       sampler.Func
+	RepeatPenalty float32 // 1.0 = выключено
+	RepeatLastN   int     // окно истории для penalty (0 = 64)
+	OnToken       func(tokenID int) bool
 }
 
 // Context выполняет prefill и autoregressive decode
@@ -58,7 +60,7 @@ func (c *Context) Generate(prompt string, params GenerateParams) (string, error)
 		return "", err
 	}
 
-	if err := sess.GenerateSteps(params.MaxTokens, params.Sampler, params.OnToken); err != nil {
+	if err := sess.GenerateSteps(params); err != nil {
 		return "", err
 	}
 

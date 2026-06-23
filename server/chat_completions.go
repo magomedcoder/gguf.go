@@ -12,13 +12,16 @@ import (
 )
 
 type chatCompletionRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	MaxTokens   int           `json:"max_tokens"`
-	Temperature float32       `json:"temperature"`
-	TopP        float32       `json:"top_p"`
-	Stream      bool          `json:"stream"`
-	Thinking    *bool         `json:"thinking"`
+	Model         string        `json:"model"`
+	Messages      []chatMessage `json:"messages"`
+	MaxTokens     int           `json:"max_tokens"`
+	Temperature   float32       `json:"temperature"`
+	TopP          float32       `json:"top_p"`
+	MinP          float32       `json:"min_p"`
+	RepeatPenalty float32       `json:"repeat_penalty"`
+	RepeatLastN   int           `json:"repeat_last_n"`
+	Stream        bool          `json:"stream"`
+	Thinking      *bool         `json:"thinking"`
 }
 
 type chatMessage struct {
@@ -128,10 +131,18 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	samp := sampler.New(sampler.Config{
 		Temp: req.Temperature,
 		TopP: req.TopP,
+		MinP: req.MinP,
 	})
 
+	genParams := runtime.GenerateParams{
+		MaxTokens:     req.MaxTokens,
+		Sampler:       samp,
+		RepeatPenalty: req.RepeatPenalty,
+		RepeatLastN:   req.RepeatLastN,
+	}
+
 	if req.Stream {
-		s.serveChatStream(w, ctx, prompt, modelName, req.MaxTokens, samp)
+		s.serveChatStream(w, ctx, prompt, modelName, genParams)
 		return
 	}
 
@@ -141,7 +152,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := sess.GenerateSteps(req.MaxTokens, samp, nil); err != nil {
+	if err := sess.GenerateSteps(genParams); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -168,7 +179,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) serveChatStream(w http.ResponseWriter, ctx *runtime.Context, prompt, model string, maxTokens int, samp sampler.Func) {
+func (s *Server) serveChatStream(w http.ResponseWriter, ctx *runtime.Context, prompt, model string, params runtime.GenerateParams) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming не поддерживается", http.StatusInternalServerError)
@@ -209,12 +220,14 @@ func (s *Server) serveChatStream(w http.ResponseWriter, ctx *runtime.Context, pr
 		Role: "assistant",
 	})
 
-	err = sess.GenerateSteps(maxTokens, samp, func(tokenID int) bool {
+	params.OnToken = func(tokenID int) bool {
 		writeChunk(chatStreamDelta{
 			Content: sess.DecodeToken(tokenID),
 		})
 		return true
-	})
+	}
+
+	err = sess.GenerateSteps(params)
 	if err != nil {
 		fmt.Fprintf(w, "data: {\"error\":%q}\n\n", err.Error())
 		flusher.Flush()

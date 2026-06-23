@@ -69,7 +69,7 @@ func TestChatCompletionsBadRequest(t *testing.T) {
 	srv := New(&runtime.Engine{}, "")
 	body := bytes.NewBufferString(`{"messages":[]}`)
 	rec := httptest.NewRecorder()
-	srv.handleChatCompletions(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", body))
+	srv.handleChatCompletions(rec, httptest.NewRequest(http.MethodPost, "/completions", body))
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("статус = %d, ожидали 400", rec.Code)

@@ -18,6 +18,9 @@ func runRun(args []string) error {
 	temp := fs.Float64("temp", 0, "температура (0 = greedy)")
 	topK := fs.Int("top-k", 0, "top-k sampling (0 = выключено)")
 	topP := fs.Float64("top-p", 1, "top-p nucleus sampling (1 = выключено)")
+	minP := fs.Float64("min-p", 0, "min-p sampling (0 = выключено)")
+	repeatPenalty := fs.Float64("repeat-penalty", 1, "штраф за повтор токенов (1 = выключено)")
+	repeatLastN := fs.Int("repeat-last-n", 64, "окно истории для repeat-penalty")
 	seed := fs.Uint64("seed", 0, "seed PRNG для sampling")
 	chat := fs.Bool("chat", false, "обернуть промпт в Qwen chat template")
 	thinking := fs.Bool("thinking", false, "Qwen3: включить режим размышления (с --chat)")
@@ -64,12 +67,15 @@ func runRun(args []string) error {
 		Temp: float32(*temp),
 		TopK: *topK,
 		TopP: float32(*topP),
+		MinP: float32(*minP),
 		Seed: *seed,
 	})
 
 	err = ctx.GenerateStream(promptText, gguf.GenerateParams{
-		MaxTokens: *maxTokens,
-		Sampler:   samp,
+		MaxTokens:     *maxTokens,
+		Sampler:       samp,
+		RepeatPenalty: float32(*repeatPenalty),
+		RepeatLastN:   *repeatLastN,
 	}, os.Stdout)
 	if err != nil {
 		return err

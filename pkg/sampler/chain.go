@@ -10,6 +10,7 @@ type Config struct {
 	Temp float32 // 0 = greedy
 	TopK int     // 0 = выключено
 	TopP float32 // 1.0 = выключено
+	MinP float32 // 0 = выключено
 	Seed uint64
 }
 
@@ -41,6 +42,15 @@ func New(cfg Config) Func {
 
 		if cfg.TopK > 0 && cfg.TopK < len(scaled) {
 			applyTopK(scaled, mask, cfg.TopK)
+		}
+
+		if cfg.MinP > 0 {
+			ApplyMinP(scaled, cfg.MinP)
+			for i, v := range scaled {
+				if v <= -1e9 {
+					mask[i] = false
+				}
+			}
 		}
 
 		for i, ok := range mask {

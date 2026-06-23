@@ -30,8 +30,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/models", s.handleModels)
 	mux.HandleFunc("/generate", s.handleGenerate)
-	mux.HandleFunc("/completion", s.handleGenerate)
-	mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
+	mux.HandleFunc("/completions", s.handleChatCompletions)
 	return mux
 }
 
@@ -108,16 +107,19 @@ func (s *Server) handleModels(w http.ResponseWriter, _ *http.Request) {
 }
 
 type completionRequest struct {
-	Prompt      string  `json:"prompt"`
-	MaxTokens   int     `json:"max_tokens"`
-	Temperature float32 `json:"temperature"`
-	TopK        int     `json:"top_k"`
-	TopP        float32 `json:"top_p"`
-	Seed        uint64  `json:"seed"`
-	Chat        bool    `json:"chat"`
-	Stream      bool    `json:"stream"`
-	System      string  `json:"system"`
-	Thinking    *bool   `json:"thinking"`
+	Prompt        string  `json:"prompt"`
+	MaxTokens     int     `json:"max_tokens"`
+	Temperature   float32 `json:"temperature"`
+	TopK          int     `json:"top_k"`
+	TopP          float32 `json:"top_p"`
+	MinP          float32 `json:"min_p"`
+	RepeatPenalty float32 `json:"repeat_penalty"`
+	RepeatLastN   int     `json:"repeat_last_n"`
+	Seed          uint64  `json:"seed"`
+	Chat          bool    `json:"chat"`
+	Stream        bool    `json:"stream"`
+	System        string  `json:"system"`
+	Thinking      *bool   `json:"thinking"`
 }
 
 type completionResponse struct {
@@ -180,8 +182,11 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 			Temp: req.Temperature,
 			TopK: req.TopK,
 			TopP: req.TopP,
+			MinP: req.MinP,
 			Seed: req.Seed,
 		}),
+		RepeatPenalty: req.RepeatPenalty,
+		RepeatLastN:   req.RepeatLastN,
 	}
 
 	if req.Stream {

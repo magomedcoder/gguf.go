@@ -202,11 +202,11 @@ Graceful shutdown по `Ctrl+C` (SIGINT/SIGTERM).
 
 #### API
 
-| Метод | Путь                   | Описание                        |
-|-------|------------------------|---------------------------------|
-| GET   | `/models`              | метаданные загруженной модели   |
-| POST  | `/generate`            | генерация текста (JSON или SSE) |
-| POST  | `/v1/chat/completions` | chat API (messages + stream)    |
+| Метод | Путь           | Описание                        |
+|-------|----------------|---------------------------------|
+| GET   | `/models`      | метаданные загруженной модели   |
+| POST  | `/generate`    | генерация текста (JSON или SSE) |
+| POST  | `/completions` | chat API (messages + stream)    |
 
 Тело `POST /generate` (`Content-Type: application/json`):
 
@@ -237,16 +237,16 @@ Streaming (SSE) - события `data: {"token":"..."}` и в конце `data:
 Примеры:
 
 ```bash
-curl -s localhost:8000/generate -H 'Content-Type: application/json' -d '{"prompt":"Привет","chat":true, "max_tokens":32}'
+curl -s 127.0.0.1:8000/generate -H 'Content-Type: application/json' -d '{"prompt":"Привет","chat":true, "max_tokens":32}'
 
-curl -N localhost:8000/generate -H 'Content-Type: application/json' -d '{"prompt":"Привет","chat":true,"stream":true,"max_tokens":32}'
+curl -N 127.0.0.1:8000/generate -H 'Content-Type: application/json' -d '{"prompt":"Привет","chat":true,"stream":true,"max_tokens":32}'
 
-curl -s localhost:8000/models
+curl -s 127.0.0.1:8000/models
 
-curl -s localhost:8000/v1/chat/completions -H 'Content-Type: application/json' -d '{"messages":[{"role":"user","content":"Привет"}],"max_tokens":32}'
+curl -s 127.0.0.1:8000/completions -H 'Content-Type: application/json' -d '{"messages":[{"role":"user","content":"Привет"}],"max_tokens":32}'
 ```
 
-Пример ответа `/v1/chat/completions`:
+Пример ответа `/completions`:
 
 ```json
 {

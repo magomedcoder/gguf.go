@@ -38,11 +38,18 @@ func (c *Context) StartGeneration(prompt string) (*GenerationSession, error) {
 // DecodeStep выбирает и декодирует один следующий токен
 // Возвращает tokenID < 0 при EOS или если sampler вернул -1
 func (s *GenerationSession) DecodeStep(samp sampler.Func) (int, error) {
+	return s.DecodeStepWith(GenerateParams{Sampler: samp})
+}
+
+// DecodeStepWith выбирает следующий токен с учётом repeat penalty
+func (s *GenerationSession) DecodeStepWith(params GenerateParams) (int, error) {
+	samp := params.Sampler
 	if samp == nil {
 		samp = sampler.Greedy
 	}
 
-	next := samp(s.logits)
+	logits := s.prepareLogits(params)
+	next := samp(logits)
 	if next < 0 {
 		return -1, nil
 	}
@@ -62,6 +69,28 @@ func (s *GenerationSession) DecodeStep(samp sampler.Func) (int, error) {
 
 	s.logits = logits
 	return next, nil
+}
+
+func (s *GenerationSession) prepareLogits(params GenerateParams) []float32 {
+	logits := make([]float32, len(s.logits))
+	copy(logits, s.logits)
+
+	if params.RepeatPenalty > 0 && params.RepeatPenalty != 1 {
+		lastN := params.RepeatLastN
+		if lastN == 0 {
+			lastN = 64
+		}
+		sampler.ApplyRepeatPenalty(logits, s.tokenHistory(), params.RepeatPenalty, lastN)
+	}
+
+	return logits
+}
+
+func (s *GenerationSession) tokenHistory() []int {
+	out := make([]int, len(s.promptTokens)+len(s.generated))
+	copy(out, s.promptTokens)
+	copy(out[len(s.promptTokens):], s.generated)
+	return out
 }
 
 // GeneratedTokens возвращает ID сгенерированных токенов
@@ -92,13 +121,14 @@ func (s *GenerationSession) DecodeToken(id int) string {
 }
 
 // GenerateSteps выполняет до maxTokens шагов decode
-func (s *GenerationSession) GenerateSteps(maxTokens int, samp sampler.Func, onToken func(int) bool) error {
+func (s *GenerationSession) GenerateSteps(params GenerateParams) error {
+	maxTokens := params.MaxTokens
 	if maxTokens <= 0 {
 		maxTokens = 128
 	}
 
 	for i := 0; i < maxTokens; i++ {
-		id, err := s.DecodeStep(samp)
+		id, err := s.DecodeStepWith(params)
 		if err != nil {
 			return err
 		}
@@ -107,7 +137,7 @@ func (s *GenerationSession) GenerateSteps(maxTokens int, samp sampler.Func, onTo
 			return nil
 		}
 
-		if onToken != nil && !onToken(id) {
+		if params.OnToken != nil && !params.OnToken(id) {
 			return nil
 		}
 	}
