@@ -24,7 +24,7 @@
 
 ## `gguf run`
 
-Генерация текста: prefill промпта → autoregressive decode → вывод в stdout.
+Генерация текста: prefill промпта -> autoregressive decode -> вывод в stdout.
 
 ```bash
 ./build/gguf run -m ./models/Qwen3-0.6B-Q8_0.gguf --chat -p "Привет" -n 64

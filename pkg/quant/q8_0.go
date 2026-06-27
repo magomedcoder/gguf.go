@@ -63,11 +63,5 @@ func DotBlockQ8_0(block []byte, x []float32) (float32, error) {
 		return 0, fmt.Errorf("quant: вектор короче блока Q8_0")
 	}
 
-	d := FP16ToFP32(binary.LittleEndian.Uint16(block[0:2]))
-	var sum float32
-	for i := range QK8_0 {
-		sum += d * float32(int8(block[2+i])) * x[i]
-	}
-
-	return sum, nil
+	return dotBlockQ8_0(block, x), nil
 }

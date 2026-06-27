@@ -16,7 +16,7 @@
 - парсинг GGUF v2/v3 (`info`, `inspect`), memory-map (`LoadMapped`, zero-copy `RawView`);
 - деквантизация и matmul: Q8_0, Q4_0, Q4_K;
 - базовые ops: RoPE, RMSNorm, GQA attention, SwiGLU;
-- **SIMD** matmul FP32: AVX2 (amd64), NEON (arm64);
+- **SIMD** matmul FP32: AVX2 (amd64), NEON (arm64); Q8_0 dot: AVX2 (amd64);
 - forward pass **Qwen3** + KV-cache;
 - tokenizer BPE из метаданных GGUF;
 - chat template ChatML/Qwen и Jinja (`--chat`, `--thinking`, `FormatChatUser`);
